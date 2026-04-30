@@ -747,7 +747,7 @@
     if (atualizandoNomes) return Promise.resolve();
     atualizandoNomes = true;
     var url = SCRIPT_URL +
-      '?action=getAll' +
+      '?action=getUsedNames' +
       '&_ts=' + Date.now();
 
     return carregarJsonp(url)
@@ -765,9 +765,28 @@
         atualizandoNomes = false;
       })
       .catch(function() {
-        // Mantém a última lista válida para evitar "piscar" e liberar todos os nomes em falhas temporárias.
-        if (!dropdownNomesInicializado) renderizarDropdownNomes();
-        atualizandoNomes = false;
+        // Fallback para versão antiga do script (sem action=getUsedNames).
+        var urlLegado = SCRIPT_URL + '?action=getAll&_ts=' + Date.now();
+        return carregarJsonp(urlLegado)
+          .then(function(payloadLegado) {
+            var ocupadosLegado = extrairNomesOcupados(payloadLegado);
+            var ocupadosSetLegado = {};
+            ocupadosLegado.forEach(function(nome) { ocupadosSetLegado[nome] = true; });
+            var novaListaLegado = nomesBase.filter(function(nome) {
+              return !ocupadosSetLegado[normalizarNome(nome)];
+            });
+            if (!listasIguais(nomesDisponiveis, novaListaLegado) || !dropdownNomesInicializado) {
+              nomesDisponiveis = novaListaLegado;
+              renderizarDropdownNomes();
+            }
+          })
+          .catch(function() {
+            // Mantém a última lista válida para evitar inconsistência visual.
+            if (!dropdownNomesInicializado) renderizarDropdownNomes();
+          })
+          .then(function() {
+            atualizandoNomes = false;
+          });
       });
   }
 

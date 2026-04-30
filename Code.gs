@@ -5,6 +5,7 @@
 
 var SHEET_ID = '1ZUdYCsNxyt4z8B5KgdtQNpBKHJxuMQAI0EW4fT68akc';
 var DATE_COLS = ['06/mai', '09/mai', '20/mai', '24/mai', '30/mai'];
+var RECEIVED_AT_COL = 9; // Coluna I
 
 /** Ordem cronológica das datas da escala (igual ao GROUP_DATES no front). */
 var SCHEDULE_DATE_KEYS = ['2026-05-06', '2026-05-09', '2026-05-20', '2026-05-24', '2026-05-30'];
@@ -18,6 +19,7 @@ function doGet(e) {
   var result;
   try {
     if (action === 'getAll') result = getAllAvailability();
+    else if (action === 'getUsedNames') result = getUsedNames();
     else if (action === 'nomesOcupados') result = getOccupiedNames(e.parameter.periodo);
     else if (action === 'getSchedule') result = getScheduleData();
     else if (action === 'setSchedule') result = setScheduleData(e.parameter.sched);
@@ -67,6 +69,11 @@ function getDispSheet() {
     var header = ['Nome'].concat(DATE_COLS);
     aba.getRange(1, 1, 1, header.length).setValues([header]);
   }
+
+  if (String(aba.getRange(1, RECEIVED_AT_COL).getValue()).trim() === '') {
+    aba.getRange(1, RECEIVED_AT_COL).setValue('Recebido em');
+  }
+  aba.getRange(2, RECEIVED_AT_COL, Math.max(1, aba.getMaxRows() - 1), 1).setNumberFormat('dd/MM/yyyy HH:mm:ss');
   return aba;
 }
 
@@ -122,6 +129,21 @@ function getOccupiedNames(periodo) {
   return { ocupados: Object.keys(namesMap).sort() };
 }
 
+function getUsedNames() {
+  var aba = getDispSheet();
+  var lastRow = aba.getLastRow();
+  if (lastRow <= 1) return { ocupados: [] };
+
+  var values = aba.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+  var namesMap = {};
+  for (var i = 0; i < values.length; i++) {
+    var nome = normalizePersonName(values[i][0]);
+    if (!nome) continue;
+    namesMap[nome] = true;
+  }
+  return { ocupados: Object.keys(namesMap).sort() };
+}
+
 function registrarEscala(selecionados) {
   if (!selecionados || selecionados.length === 0) return;
 
@@ -164,6 +186,7 @@ function registrarEscala(selecionados) {
   if (targetRow === -1) targetRow = Math.max(2, lastRow + 1);
 
   aba.getRange(targetRow, 1).setValue(nome.toUpperCase());
+  aba.getRange(targetRow, RECEIVED_AT_COL).setValue(new Date());
 
   selecionados.forEach(function(item) {
     var iso = normalizeDate(String(item[1] || '').trim());

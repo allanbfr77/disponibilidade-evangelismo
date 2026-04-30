@@ -630,11 +630,13 @@
     'PR. MARCIO', 'PRA. DANIELA', 'RODOLFO', 'ROSE', 'SALATHIEL', 'SEBASTIANA',
     'SUELLEN', 'VANESSA ROCHA', 'ZEMA'
   ];
-  var nomesDisponiveis = nomesBase.slice();
+  var nomesDisponiveis = [];
   var pollingNomesId = null;
   var atualizandoNomes = false;
   var renderNomesPendente = false;
   var dropdownNomesInicializado = false;
+  var RETRY_MAX = 3;
+  var RETRY_BASE_MS = 2000;
 
   function normalizarNome(nome) {
     return String(nome || '')
@@ -703,6 +705,34 @@
     });
   }
 
+  function setSelectEstado(estado, mensagem) {
+    var select = document.getElementById('nome');
+    var wrap = document.getElementById('nome-status');
+    if (wrap) wrap.remove();
+
+    if (estado === 'loading') {
+      select.innerHTML = '<option value="">Buscando nomes...</option>';
+      select.disabled = true;
+      var status = document.createElement('div');
+      status.id = 'nome-status';
+      status.style.cssText = 'font-size:12px;color:var(--gray-400);margin-top:6px;display:flex;align-items:center;gap:6px;';
+      status.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin .8s linear infinite;flex-shrink:0"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Carregando lista de nomes...';
+      select.parentNode.insertAdjacentElement('afterend', status);
+    } else if (estado === 'erro') {
+      select.innerHTML = '<option value="">Erro ao carregar</option>';
+      select.disabled = true;
+      var status = document.createElement('div');
+      status.id = 'nome-status';
+      status.style.cssText = 'font-size:12px;color:#ef4444;margin-top:6px;display:flex;align-items:center;gap:6px;cursor:pointer;';
+      status.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' + (mensagem || 'Falha na conexão.') + ' <u style="margin-left:4px">Tentar novamente</u>';
+      status.addEventListener('click', function() { iniciarCargaNomes(0); });
+      select.parentNode.insertAdjacentElement('afterend', status);
+    } else {
+      var s = document.getElementById('nome-status');
+      if (s) s.remove();
+    }
+  }
+
   function renderizarDropdownNomes() {
     var select = document.getElementById('nome');
     if (document.activeElement === select) {
@@ -717,7 +747,7 @@
     placeholder.value = '';
     placeholder.textContent = nomesDisponiveis.length
       ? 'Selecione seu nome'
-      : 'Sem nomes disponíveis no momento';
+      : 'Nenhum nome disponível';
     select.appendChild(placeholder);
 
     nomesDisponiveis.forEach(function(nome) {
@@ -730,8 +760,9 @@
     if (nomesDisponiveis.indexOf(nomeSelecionado) >= 0) {
       select.value = nomeSelecionado;
     }
-    select.disabled = nomesDisponiveis.length === 0;
+    select.disabled = false;
     dropdownNomesInicializado = true;
+    setSelectEstado('ok');
   }
 
   function listasIguais(a, b) {
@@ -743,51 +774,52 @@
     return true;
   }
 
-  function atualizarNomesDisponiveis() {
-    if (atualizandoNomes) return Promise.resolve();
-    atualizandoNomes = true;
-    var url = SCRIPT_URL +
-      '?action=getUsedNames' +
-      '&_ts=' + Date.now();
+  function buscarNomesApi() {
+    var url = SCRIPT_URL + '?action=getUsedNames&_ts=' + Date.now();
+    return carregarJsonp(url).then(function(payload) {
+      var ocupados = extrairNomesOcupados(payload);
+      var ocupadosSet = {};
+      ocupados.forEach(function(n) { ocupadosSet[n] = true; });
+      return nomesBase.filter(function(n) { return !ocupadosSet[normalizarNome(n)]; });
+    });
+  }
 
-    return carregarJsonp(url)
-      .then(function(payload) {
-        var ocupados = extrairNomesOcupados(payload);
-        var ocupadosSet = {};
-        ocupados.forEach(function(nome) { ocupadosSet[nome] = true; });
-        var novaLista = nomesBase.filter(function(nome) {
-          return !ocupadosSet[normalizarNome(nome)];
-        });
+  function iniciarCargaNomes(tentativa) {
+    if (atualizandoNomes) return;
+    atualizandoNomes = true;
+    if (!dropdownNomesInicializado) setSelectEstado('loading');
+
+    buscarNomesApi()
+      .then(function(novaLista) {
+        atualizandoNomes = false;
         if (!listasIguais(nomesDisponiveis, novaLista) || !dropdownNomesInicializado) {
           nomesDisponiveis = novaLista;
           renderizarDropdownNomes();
+        } else {
+          setSelectEstado('ok');
         }
-        atualizandoNomes = false;
+        if (pollingNomesId) clearInterval(pollingNomesId);
+        pollingNomesId = setInterval(function() { iniciarCargaNomes(0); }, 60000);
       })
       .catch(function() {
-        // Fallback para versão antiga do script (sem action=getUsedNames).
-        var urlLegado = SCRIPT_URL + '?action=getAll&_ts=' + Date.now();
-        return carregarJsonp(urlLegado)
-          .then(function(payloadLegado) {
-            var ocupadosLegado = extrairNomesOcupados(payloadLegado);
-            var ocupadosSetLegado = {};
-            ocupadosLegado.forEach(function(nome) { ocupadosSetLegado[nome] = true; });
-            var novaListaLegado = nomesBase.filter(function(nome) {
-              return !ocupadosSetLegado[normalizarNome(nome)];
-            });
-            if (!listasIguais(nomesDisponiveis, novaListaLegado) || !dropdownNomesInicializado) {
-              nomesDisponiveis = novaListaLegado;
-              renderizarDropdownNomes();
-            }
-          })
-          .catch(function() {
-            // Mantém a última lista válida para evitar inconsistência visual.
-            if (!dropdownNomesInicializado) renderizarDropdownNomes();
-          })
-          .then(function() {
-            atualizandoNomes = false;
-          });
+        atualizandoNomes = false;
+        var proxTentativa = (tentativa || 0) + 1;
+        if (proxTentativa <= RETRY_MAX) {
+          var espera = RETRY_BASE_MS * proxTentativa;
+          if (!dropdownNomesInicializado) {
+            setSelectEstado('loading');
+          }
+          setTimeout(function() { iniciarCargaNomes(proxTentativa); }, espera);
+        } else {
+          if (!dropdownNomesInicializado) {
+            setSelectEstado('erro', 'Não foi possível carregar os nomes.');
+          }
+        }
       });
+  }
+
+  function atualizarNomesDisponiveis() {
+    iniciarCargaNomes(0);
   }
 
   function iniciarSincronizacaoNomes() {
@@ -797,9 +829,7 @@
         if (renderNomesPendente) renderizarDropdownNomes();
       });
     }
-    atualizarNomesDisponiveis();
-    if (pollingNomesId) clearInterval(pollingNomesId);
-    pollingNomesId = setInterval(atualizarNomesDisponiveis, 30000);
+    iniciarCargaNomes(0);
   }
 
   function toggleChip(el) {

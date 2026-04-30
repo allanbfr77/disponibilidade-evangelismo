@@ -64,17 +64,18 @@ function getDispSheet() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var aba = ss.getSheetByName('Disponibilidades') || ss.getSheets()[0];
 
-  if (aba.getLastRow() === 0 || String(aba.getRange(1, 1).getValue()).trim() === '') {
+  var primeiraLinha = aba.getLastRow() === 0 ? '' : String(aba.getRange(1, 1).getValue()).trim();
+  if (!primeiraLinha) {
     aba.getRange(1, 2, 1, DATE_COLS.length).setNumberFormat('@STRING@');
     var header = ['Nome'].concat(DATE_COLS);
     aba.getRange(1, 1, 1, header.length).setValues([header]);
-  }
-
-  if (String(aba.getRange(1, RECEIVED_AT_COL).getValue()).trim() === '') {
     aba.getRange(1, RECEIVED_AT_COL).setValue('Recebido em');
   }
-  aba.getRange(2, RECEIVED_AT_COL, Math.max(1, aba.getMaxRows() - 1), 1).setNumberFormat('dd/MM/yyyy HH:mm:ss');
   return aba;
+}
+
+function garantirFormatoRecebidoEm(aba, targetRow) {
+  aba.getRange(targetRow, RECEIVED_AT_COL).setNumberFormat('dd/MM/yyyy HH:mm:ss');
 }
 
 function getAllAvailability() {
@@ -129,8 +130,18 @@ function getOccupiedNames(periodo) {
   return { ocupados: Object.keys(namesMap).sort() };
 }
 
+var CACHE_KEY_USED_NAMES = 'usedNames_v1';
+var CACHE_TTL_SECONDS    = 60;
+
 function getUsedNames() {
-  var aba = getDispSheet();
+  try {
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get(CACHE_KEY_USED_NAMES);
+    if (cached) return JSON.parse(cached);
+  } catch (e) { /* ignora falha de cache */ }
+
+  var ss  = SpreadsheetApp.openById(SHEET_ID);
+  var aba = ss.getSheetByName('Disponibilidades') || ss.getSheets()[0];
   var lastRow = aba.getLastRow();
   if (lastRow <= 1) return { ocupados: [] };
 
@@ -141,7 +152,17 @@ function getUsedNames() {
     if (!nome) continue;
     namesMap[nome] = true;
   }
-  return { ocupados: Object.keys(namesMap).sort() };
+  var result = { ocupados: Object.keys(namesMap).sort() };
+
+  try {
+    CacheService.getScriptCache().put(CACHE_KEY_USED_NAMES, JSON.stringify(result), CACHE_TTL_SECONDS);
+  } catch (e) { /* ignora falha de cache */ }
+
+  return result;
+}
+
+function invalidarCacheNomes() {
+  try { CacheService.getScriptCache().remove(CACHE_KEY_USED_NAMES); } catch (e) {}
 }
 
 function registrarEscala(selecionados) {
@@ -186,7 +207,9 @@ function registrarEscala(selecionados) {
   if (targetRow === -1) targetRow = Math.max(2, lastRow + 1);
 
   aba.getRange(targetRow, 1).setValue(nome.toUpperCase());
+  garantirFormatoRecebidoEm(aba, targetRow);
   aba.getRange(targetRow, RECEIVED_AT_COL).setValue(new Date());
+  invalidarCacheNomes();
 
   selecionados.forEach(function(item) {
     var iso = normalizeDate(String(item[1] || '').trim());

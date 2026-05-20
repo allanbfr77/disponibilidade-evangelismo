@@ -4,11 +4,11 @@
  */
 
 var SHEET_ID = '1ZUdYCsNxyt4z8B5KgdtQNpBKHJxuMQAI0EW4fT68akc';
-var DATE_COLS = ['06/mai', '09/mai', '20/mai', '24/mai', '30/mai'];
+var DATE_COLS = ['03/jun', '06/jun', '20/jun', '24/jun', '28/jun'];
 var RECEIVED_AT_COL = 9; // Coluna I
 
 /** Ordem cronológica das datas da escala (igual ao GROUP_DATES no front). */
-var SCHEDULE_DATE_KEYS = ['2026-05-06', '2026-05-09', '2026-05-20', '2026-05-24', '2026-05-30'];
+var SCHEDULE_DATE_KEYS = ['2026-06-03', '2026-06-06', '2026-06-20', '2026-06-24', '2026-06-28'];
 
 /* ════════════════════════════════════════
    ROTEADOR
@@ -224,10 +224,10 @@ function normalizeDate(rawDate) {
   var s = String(rawDate || '').trim();
   if (!s) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  var m = s.match(/^(\d{1,2})\/mai$/i);
+  var m = s.match(/^(\d{1,2})\/jun$/i);
   if (m) {
     var d = parseInt(m[1], 10);
-    return '2026-05-' + (d < 10 ? '0' + d : String(d));
+    return '2026-06-' + (d < 10 ? '0' + d : String(d));
   }
   return s;
 }
@@ -235,7 +235,7 @@ function normalizeDate(rawDate) {
 function periodFromText(periodo) {
   var s = String(periodo || '').trim().toLowerCase();
   if (!s) return '';
-  if (s.indexOf('mai') !== -1 && s.indexOf('2026') !== -1) return '2026-05';
+  if (s.indexOf('jun') !== -1 && s.indexOf('2026') !== -1) return '2026-06';
   return '';
 }
 

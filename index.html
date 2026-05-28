@@ -968,7 +968,15 @@
     document.getElementById('modal-overlay').style.display = 'none';
   }
 
+  function escalaEncerrada() {
+    return new Date().getDate() >= 29;
+  }
+
   function enviar() {
+    if (escalaEncerrada()) {
+      showModal('Atenção', 'Não foi enviado. A escala está encerrada.', true);
+      return;
+    }
     var nome = normalizarNome(document.getElementById('nome').value);
     if (!nome) {
       showModal('Nome obrigatório', 'Por favor, selecione seu nome antes de enviar.', true);

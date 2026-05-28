@@ -968,15 +968,82 @@
     document.getElementById('modal-overlay').style.display = 'none';
   }
 
-  function escalaEncerrada() {
-    return new Date().getDate() >= 29;
+  var ESCALA_ESTADO = { ABERTO: 'aberto', ENCERRADO: 'encerrado', AGUARDANDO: 'aguardando' };
+  var escalaEstadoTimerId = null;
+  var escalaEstadoIntervalId = null;
+
+  function getEscalaEstado() {
+    var dia = new Date().getDate();
+    if (dia >= 22 && dia <= 28) return ESCALA_ESTADO.ABERTO;
+    if (dia >= 29) return ESCALA_ESTADO.ENCERRADO;
+    return ESCALA_ESTADO.AGUARDANDO;
+  }
+
+  function getEscalaStatusEl() {
+    var el = document.getElementById('escala-status-msg');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'escala-status-msg';
+      el.setAttribute('role', 'status');
+      el.style.cssText = 'display:none;margin-bottom:14px;padding:14px 16px;border-radius:var(--radius-md);background:var(--amber-100);color:var(--amber-600);font-size:14px;font-weight:600;line-height:1.5;text-align:center;';
+      document.getElementById('btn-enviar').parentNode.insertBefore(el, document.getElementById('btn-enviar'));
+    }
+    return el;
+  }
+
+  function proximaViradaEscala() {
+    var agora = new Date();
+    var dia = agora.getDate();
+    var mes = agora.getMonth();
+    var ano = agora.getFullYear();
+    if (dia < 22) return new Date(ano, mes, 22, 0, 0, 0, 0);
+    if (dia <= 28) return new Date(ano, mes, 29, 0, 0, 0, 0);
+    return new Date(ano, mes + 1, 1, 0, 0, 0, 0);
+  }
+
+  function agendarMonitorEscala() {
+    if (escalaEstadoTimerId) clearTimeout(escalaEstadoTimerId);
+    var ms = proximaViradaEscala().getTime() - Date.now();
+    if (ms < 1000) ms = 1000;
+    escalaEstadoTimerId = setTimeout(function() {
+      aplicarEstadoEscala();
+      agendarMonitorEscala();
+    }, ms);
+  }
+
+  function aplicarEstadoEscala() {
+    var estado = getEscalaEstado();
+    var btn = document.getElementById('btn-enviar');
+    var msgEl = getEscalaStatusEl();
+    var emEnvio = btn.classList.contains('loading');
+
+    if (estado === ESCALA_ESTADO.AGUARDANDO) {
+      msgEl.textContent = 'Aguardando a liberação do calendário do próximo mês.';
+      msgEl.style.display = 'block';
+      if (!emEnvio) btn.disabled = true;
+    } else {
+      msgEl.style.display = 'none';
+      if (!emEnvio) btn.disabled = false;
+    }
+  }
+
+  function iniciarMaquinaEstadosEscala() {
+    aplicarEstadoEscala();
+    agendarMonitorEscala();
+    if (escalaEstadoIntervalId) clearInterval(escalaEstadoIntervalId);
+    escalaEstadoIntervalId = setInterval(aplicarEstadoEscala, 60000);
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) aplicarEstadoEscala();
+    });
   }
 
   function enviar() {
-    if (escalaEncerrada()) {
+    var estadoEscala = getEscalaEstado();
+    if (estadoEscala === ESCALA_ESTADO.ENCERRADO) {
       showModal('Atenção', 'Não foi enviado. A escala está encerrada.', true);
       return;
     }
+    if (estadoEscala === ESCALA_ESTADO.AGUARDANDO) return;
     var nome = normalizarNome(document.getElementById('nome').value);
     if (!nome) {
       showModal('Nome obrigatório', 'Por favor, selecione seu nome antes de enviar.', true);
@@ -1024,9 +1091,9 @@
   }
 
   function resetar(btn) {
-    btn.disabled = false;
     btn.classList.remove('loading');
     document.getElementById('btn-text').textContent = 'Enviar disponibilidade';
+    aplicarEstadoEscala();
     document.getElementById('nome').value = '';
     document.querySelectorAll('.day-chip, .all-chip, .ind-chip').forEach(function(c) { c.classList.remove('checked'); });
     atualizarCalendario();
@@ -1035,6 +1102,7 @@
   habilitarCliqueNoCalendario();
   atualizarCalendario();
   iniciarSincronizacaoNomes();
+  iniciarMaquinaEstadosEscala();
 </script>
 
 </body>

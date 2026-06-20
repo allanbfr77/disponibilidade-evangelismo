@@ -1,4 +1,4 @@
-# Escala de Maio 2026 — Grupo de Evangelismo
+# Escala de Julho 2026 — Grupo de Evangelismo
 
 Site estático hospedado no **GitHub Pages**, com dados gravados no **Google Sheets** via Apps Script novo (separado do projeto original).
 
@@ -18,7 +18,7 @@ escala-evangelismo/
 ## Passo 1 — Criar a nova planilha
 
 1. Acesse [sheets.google.com](https://sheets.google.com) e crie uma planilha em branco.
-2. Dê o nome que quiser (ex: "Escala Maio 2026 - Web").
+2. Dê o nome que quiser (ex: "Escala Julho 2026 - Web").
 3. Copie o **ID da planilha** — é a parte longa da URL entre `/d/` e `/edit`:
    ```
    https://docs.google.com/spreadsheets/d/  ESTE_E_O_ID  /edit

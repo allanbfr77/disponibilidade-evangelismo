@@ -114,8 +114,8 @@ var SCRIPT_URL = 'https://script.google.com/macros/s/SUA_URL_AQUI/exec';
 
 ```json
 [
-  ["NOME", "08/jul", "Disponivel"],
-  ["NOME", "04/jul", "Indisponivel"]
+  ["NOME", "12/ago", "Disponivel"],
+  ["NOME", "01/ago", "Indisponivel"]
 ]
 ```
 

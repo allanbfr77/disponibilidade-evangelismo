@@ -822,18 +822,17 @@
   function buscarNomesApi() {
     var ts = Date.now();
     var url = SCRIPT_URL + '?action=getUsedNames&_ts=' + ts;
-    var temFetch = typeof fetch === 'function';
 
-    if (temFetch) {
-      return fetchComTimeout(url, 20000, { cache: 'no-store' })
-        .then(processarPayloadNomes)
-        .catch(function() {
-          return carregarJsonp(url)
-            .then(processarPayloadNomes);
-        });
-    }
+    // JSONP (tag <script>) não sofre bloqueio de CORS e, na prática, responde bem mais
+    // rápido que fetch() contra a URL /exec do Apps Script (que às vezes trava até
+    // estourar o timeout antes de cair no fallback). Por isso vai primeiro aqui.
     return carregarJsonp(url)
-      .then(processarPayloadNomes);
+      .then(processarPayloadNomes)
+      .catch(function() {
+        if (typeof fetch !== 'function') throw new Error('Sem fetch disponível');
+        return fetchComTimeout(url, 6000, { cache: 'no-store' })
+          .then(processarPayloadNomes);
+      });
   }
 
   function iniciarCargaNomes(tentativa) {

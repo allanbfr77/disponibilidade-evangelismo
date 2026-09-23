@@ -138,7 +138,7 @@ function getOccupiedNames(periodo) {
 }
 
 var NOMES_CACHE_KEY = 'usedNames_v1';
-var NOMES_CACHE_TTL_SEC = 30; // dados podem ficar até 30s "atrasados" em troca de resposta quase instantânea
+var NOMES_CACHE_TTL_SEC = 55; // dados podem ficar até 55s "atrasados" em troca de resposta quase instantânea (alinhado ao polling de 60s do front)
 
 function getUsedNames() {
   var cache = CacheService.getScriptCache();
@@ -180,7 +180,13 @@ function registrarEscala(selecionados) {
   var nomeNorm = normalizePersonName(nome);
 
   var lastCol = Math.max(aba.getLastColumn(), 1);
-  var headers = aba.getRange(1, 1, 1, lastCol).getValues()[0];
+  var lastRow = aba.getLastRow();
+
+  // Uma única leitura cobrindo cabeçalho + todos os nomes já cadastrados,
+  // em vez de duas chamadas separadas à Sheets API.
+  var readRows = Math.max(lastRow, 1);
+  var bloco = aba.getRange(1, 1, readRows, lastCol).getValues();
+  var headers = bloco[0];
   var recvCol = findReceivedAtColumn(headers);
   var colMap = {};
   for (var h = 1; h < headers.length; h++) {
@@ -190,41 +196,43 @@ function registrarEscala(selecionados) {
     if (iso) colMap[iso] = colNum;
   }
 
-  var lastRow = aba.getLastRow();
   var targetRow = -1;
-  if (lastRow > 1) {
-    var names = aba.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
-    for (var n = 0; n < names.length; n++) {
-      var existingNameNorm = normalizePersonName(names[n][0]);
-      if (existingNameNorm && existingNameNorm === nomeNorm) {
-        targetRow = n + 2;
+  for (var n = 1; n < bloco.length; n++) {
+    var existingNameNorm = normalizePersonName(bloco[n][0]);
+    if (existingNameNorm && existingNameNorm === nomeNorm) {
+      targetRow = n + 1;
+      break;
+    }
+  }
+  if (targetRow === -1) {
+    for (var e = 1; e < bloco.length; e++) {
+      if (!String(bloco[e][0] || '').trim()) {
+        targetRow = e + 1;
         break;
       }
     }
-
-    if (targetRow === -1) {
-      for (var e = 0; e < names.length; e++) {
-        if (!String(names[e][0] || '').trim()) {
-          targetRow = e + 2;
-          break;
-        }
-      }
-    }
   }
-
   if (targetRow === -1) targetRow = Math.max(2, lastRow + 1);
 
-  aba.getRange(targetRow, 1).setValue(nome.toUpperCase());
-  garantirFormatoRecebidoEm(aba, targetRow);
-  aba.getRange(targetRow, recvCol).setValue(new Date());
-  invalidarCacheNomes();
+  // Monta a linha inteira em memória e grava tudo de uma vez (1 chamada),
+  // em vez de um setValue() por célula (era 1 para o nome + 1 por data + 1 para "recebido em").
+  var largura = Math.max(lastCol, recvCol); // salvaguarda: recvCol pode, em teoria, cair fora da última coluna lida
+  var linhaAtual = bloco[targetRow - 1] || [];
+  var novaLinha = [];
+  for (var c = 0; c < largura; c++) novaLinha.push(linhaAtual[c] || '');
+  novaLinha[0] = nome.toUpperCase();
+  novaLinha[recvCol - 1] = new Date();
 
   selecionados.forEach(function(item) {
     var iso = normalizeDate(String(item[1] || '').trim());
     var col = colMap[iso];
     if (!col) return;
-    aba.getRange(targetRow, col).setValue(item[2] === 'Disponivel' ? '✓' : '');
+    novaLinha[col - 1] = item[2] === 'Disponivel' ? '✓' : '';
   });
+
+  aba.getRange(targetRow, 1, 1, largura).setValues([novaLinha]);
+  garantirFormatoRecebidoEm(aba, targetRow, recvCol);
+  invalidarCacheNomes();
 }
 
 function normalizePersonName(rawName) {
